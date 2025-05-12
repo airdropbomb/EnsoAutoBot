@@ -94,7 +94,7 @@ async function getPublicIP(proxy = null) {
 
 async function getNonce(proxy = null, retryCount = 0) {
   const maxRetries = 5;
-  const spinner = ora({ text: chalk.cyan?action(` ┊ → Fetching nonce${retryCount > 0 ? ` (Retry ${retryCount}/${maxRetries})` : ''}...`), prefixText: '', spinner: 'bouncingBar' }).start();
+  const spinner = ora({ text: chalk.cyan(` ┊ → Fetching nonce${retryCount > 0 ? ` (Retry ${retryCount}/${maxRetries})` : ''}...`), prefixText: '', spinner: 'bouncingBar' }).start();
   try {
     let config = { headers: { 'Content-Type': 'application/json' } };
     if (proxy) {
