@@ -46,7 +46,7 @@ async function typeText(text, color, noType = false) {
   }
   const totalTime = 200;
   const sleepTime = displayText.length > 0 ? totalTime / displayText.length : 1;
-  console.log(color(' ┊ ┌── Response Chat API ──'));
+  console.log(color(' ┊ ┌── Chat API Response ──'));
   process.stdout.write(color(' ┊ │ '));
   for (const char of displayText) {
     process.stdout.write(char);
@@ -75,7 +75,7 @@ function isValidUUID(uuid) {
 }
 
 async function getPublicIP(proxy = null) {
-  const spinner = ora({ text: chalk.cyan(' ┊ → Obtaining IP...'), prefixText: '', spinner: 'bouncingBar' }).start();
+  const spinner = ora({ text: chalk.cyan(' ┊ → Retrieving IP...'), prefixText: '', spinner: 'bouncingBar' }).start();
   try {
     let config = {};
     if (proxy) {
@@ -87,7 +87,7 @@ async function getPublicIP(proxy = null) {
     await sleep(100);
     return response.data.ip;
   } catch (err) {
-    spinner.fail(chalk.red(' ┊ ✗ Failed to obtain IP'));
+    spinner.fail(chalk.red(' ┊ ✗ Failed to retrieve IP'));
     return 'Unknown';
   }
 }
@@ -402,7 +402,7 @@ async function createDefiDex(projectSlug, address, zealyUserId, proxy = null, re
   }
 }
 
-async function getCampaigns(address, proxy = null, retryCount = 0) {
+async function getCampaigns(zealyUserId, proxy = null, retryCount = 0) {
   const maxRetries = 3;
   const limit = 10;
   let allCampaigns = [];
@@ -432,7 +432,7 @@ async function getCampaigns(address, proxy = null, retryCount = 0) {
     }
 
     while (true) {
-      const response = await axios.get(`https://speedrun.enso.build/api/get-campaigns?page=${page}&limit=${limit}&userId=${address}`, config);
+      const response = await axios.get(`https://speedrun.enso.build/api/get-campaigns?page=${page}&limit=${limit}&zealyUserId=${zealyUserId}`, config);
       const { campaigns, total } = response.data;
       allCampaigns = allCampaigns.concat(campaigns);
       spinner.text = chalk.cyan(` ┊ → Fetching campaign list (Page ${page}/${Math.ceil(total / limit)})...`);
@@ -449,7 +449,7 @@ async function getCampaigns(address, proxy = null, retryCount = 0) {
     if (retryCount < maxRetries - 1) {
       spinner.text = chalk.cyan(` ┊ → Fetching campaign list (Retry ${retryCount + 1}/${maxRetries})...`);
       await sleep(5000);
-      return getCampaigns(address, proxy, retryCount + 1);
+      return getCampaigns(zealyUserId, proxy, retryCount + 1);
     }
     spinner.fail(chalk.red(` ┊ ✗ Failed to fetch campaign list: ${errorMsg}`));
     await sleep(100);
@@ -509,6 +509,111 @@ async function completeCampaign(address, campaignId, campaignName, zealyUserId, 
   }
 }
 
+async function getProtocols(zealyUserId, proxy = null, retryCount = 0) {
+  const maxRetries = 3;
+  const limit = 10;
+  let allProtocols = [];
+  const totalPages = 12;
+  const spinner = ora({ text: chalk.cyan(` ┊ → Fetching protocol list (Page 1/${totalPages})...`), prefixText: '', spinner: 'bouncingBar' }).start();
+  try {
+    let config = {
+      headers: {
+        'accept': 'application/json, text/plain, */*',
+        'accept-language': 'en-US,en;q=0.7',
+        'content-type': 'application/json',
+        'priority': 'u=1, i',
+        'sec-ch-ua': randomUseragent.getRandom(),
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'sec-gpc': '1',
+        'Referer': 'https://speedrun.enso.build/campaign',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+      },
+    };
+    if (proxy) {
+      config.httpAgent = new HttpsProxyAgent(proxy);
+      config.httpsAgent = new HttpsProxyAgent(proxy);
+    }
+
+    for (let page = 1; page <= totalPages; page++) {
+      const response = await axios.get(`https://speedrun.enso.build/api/get-protocols?page=${page}&limit=${limit}&zealyUserId=${zealyUserId}`, config);
+      const { protocols } = response.data;
+      allProtocols = allProtocols.concat(protocols);
+      spinner.text = chalk.cyan(` ┊ → Fetching protocol list (Page ${page}/${totalPages})...`);
+      await sleep(2000);
+    }
+
+    spinner.succeed(chalk.green(` ┊ ✓ ${allProtocols.length} protocols found`));
+    await sleep(100);
+    return allProtocols;
+  } catch (err) {
+    const errorMsg = err.response ? `HTTP ${err.response.status}` : err.message;
+    if (retryCount < maxRetries - 1) {
+      spinner.text = chalk.cyan(` ┊ → Fetching protocol list (Retry ${retryCount + 1}/${maxRetries})...`);
+      await sleep(5000);
+      return getProtocols(zealyUserId, proxy, retryCount + 1);
+    }
+    spinner.fail(chalk.red(` ┊ ✗ Failed to fetch protocol list: ${errorMsg}`));
+    await sleep(100);
+    return [];
+  } finally {
+    spinner.stop();
+  }
+}
+
+async function completeProtocol(address, protocolId, protocolName, zealyUserId, proxy = null, retryCount = 0, spinner = null) {
+  const maxRetries = 3;
+  try {
+    let config = {
+      headers: {
+        'accept': 'application/json, text/plain, */*',
+        'accept-language': 'en-US,en;q=0.7',
+        'content-type': 'application/json',
+        'priority': 'u=1, i',
+        'sec-ch-ua': randomUseragent.getRandom(),
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'sec-gpc': '1',
+        'Referer': 'https://speedrun.enso.build/campaign',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+      },
+    };
+    if (proxy) {
+      config.httpAgent = new HttpsProxyAgent(proxy);
+      config.httpsAgent = new HttpsProxyAgent(proxy);
+    }
+    const payload = {
+      userId: address,
+      protocolId,
+      zealyUserId,
+    };
+    const response = await axios.post('https://speedrun.enso.build/api/track-protocol', payload, config);
+    if (response.data.message === 'Points awarded and visit recorded') {
+      return true;
+    } else {
+      throw new Error(response.data.message || 'Failed to complete protocol');
+    }
+  } catch (err) {
+    const errorMsg = err.response ? `HTTP ${err.response.status}: ${JSON.stringify(err.response.data || {})}` : err.message;
+    if (retryCount < maxRetries - 1) {
+      await sleep(5000);
+      return completeProtocol(address, protocolId, protocolName, zealyUserId, proxy, retryCount + 1, spinner);
+    }
+    if (spinner) {
+      spinner.stop();
+      console.log(chalk.red(` ┊ ✗ Failed to complete protocol ${protocolName} (ID: ${protocolId}): ${errorMsg}`));
+      spinner.start();
+    }
+    return false;
+  }
+}
+
 function displayCountdown(nextRun) {
   const interval = setInterval(() => {
     const now = moment().tz('Asia/Jakarta');
@@ -548,6 +653,8 @@ async function processAccounts(accounts, messages, accountProxies, noType) {
   let failedDexes = 0;
   let successfulCampaigns = 0;
   let failedCampaigns = 0;
+  let successfulProtocols = 0;
+  let failedProtocols = 0;
 
   for (let i = 0; i < accounts.length; i++) {
     const account = accounts[i];
@@ -602,7 +709,7 @@ async function processAccounts(accounts, messages, accountProxies, noType) {
       console.log(chalk.yellow(' ┊ └──'));
 
       console.log(chalk.magentaBright(' ┊ ┌── Completing Campaigns Process ──'));
-      const campaigns = await getCampaigns(account.address, proxy);
+      const campaigns = await getCampaigns(account.zealyUserId, proxy);
       if (campaigns.length === 0) {
         console.log(chalk.yellow(' ┊ │ Unable to fetch campaign list due to server error'));
         console.log(chalk.yellow(' ┊ └──'));
@@ -627,6 +734,36 @@ async function processAccounts(accounts, messages, accountProxies, noType) {
             await sleep(1000);
           }
           spinner.succeed(chalk.green(` ┊ ✓ ${successfulCampaigns} of ${pendingCampaigns.length} campaigns completed`));
+          console.log(chalk.yellow(' ┊ └──'));
+        }
+      }
+
+      console.log(chalk.magentaBright(' ┊ ┌── Completing Protocols Process ──'));
+      const protocols = await getProtocols(account.zealyUserId, proxy);
+      if (protocols.length === 0) {
+        console.log(chalk.yellow(' ┊ │ Unable to fetch protocol list due to server error'));
+        console.log(chalk.yellow(' ┊ └──'));
+      } else {
+        const pendingProtocols = protocols.filter(p => !p.visited && !p.pointsAwarded);
+        if (pendingProtocols.length === 0) {
+          console.log(chalk.green(' ┊ │ All protocols completed!'));
+          console.log(chalk.yellow(' ┊ └──'));
+        } else {
+          console.log(chalk.white(` ┊ │ ${pendingProtocols.length} pending protocols found`));
+          const spinner = ora({ text: chalk.cyan(` ┊ │ Processing protocols: 0/${pendingProtocols.length}...`), prefixText: '', spinner: 'bouncingBar' }).start();
+          for (let j = 0; j < pendingProtocols.length; j++) {
+            const protocol = pendingProtocols[j];
+            const success = await completeProtocol(account.address, protocol.id, protocol.name, account.zealyUserId, proxy, 0, spinner);
+            if (success) {
+              successfulProtocols++;
+            } else {
+              failedProtocols++;
+              partialFailure = true;
+            }
+            spinner.text = chalk.cyan(` ┊ │ Processing protocols: ${j + 1}/${pendingProtocols.length}...`);
+            await sleep(1000);
+          }
+          spinner.succeed(chalk.green(` ┊ ✓ ${successfulProtocols} of ${pendingProtocols.length} protocols completed`));
           console.log(chalk.yellow(' ┊ └──'));
         }
       }
@@ -656,6 +793,9 @@ async function processAccounts(accounts, messages, accountProxies, noType) {
   }
   if (failedCampaigns > 0) {
     console.log(chalk.yellow(` ┊ ⚠️ ${failedCampaigns} campaigns failed`));
+  }
+  if (failedProtocols > 0) {
+    console.log(chalk.yellow(` ┊ ⚠️ ${failedProtocols} protocols failed`));
   }
 }
 
@@ -705,10 +845,10 @@ async function main() {
 
   let messages = [];
   try {
-    const msgData = await fs.readFile('message.txt', 'utf8');
+    const msgData = await fs.readFile('pesan.txt', 'utf8');
     messages = msgData.split('\n').filter(line => line.trim() !== '');
   } catch (err) {
-    console.log(chalk.red('✗ File message.txt not found or empty!'));
+    console.log(chalk.red('✗ File pesan.txt not found or empty!'));
     rl.close();
     return;
   }
@@ -730,7 +870,7 @@ async function main() {
       const proxyData = await fs.readFile('proxy.txt', 'utf8');
       proxies = proxyData.split('\n').filter(line => line.trim() !== '');
     } catch (err) {
-      console.log(chalk.yellow('✗ File proxy.txt not found. Proceeding without proxy. Ensure proxy.txt contains proxy list in format http://user:pass@host:port, one per line.'));
+      console.log(chalk.yellow('✗ File proxy.txt not found. Continuing without proxy. Ensure proxy.txt contains a list of proxies in the format http://user:pass@host:port, one per line.'));
     }
   }
 
