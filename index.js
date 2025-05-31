@@ -48,7 +48,7 @@ function displayHeader(text, color) {
 }
 
 function isValidPrivateKey(pk) {
-  return /^0x[a-fA-F0-9]{64}$|^[a jardins.test(pk);
+  return /^0x[a-fA-F0-9]{64}$|^[a-fA-F0-9]{64}$/.test(pk);
 }
 
 function isValidUUID(uuid) {
