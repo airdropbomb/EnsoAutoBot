@@ -37,25 +37,6 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function typeText(text, color, noType = false) {
-  const maxLength = 80;
-  const displayText = text.length > maxLength ? text.slice(0, maxLength) + '...' : text;
-  if (noType) {
-    console.log(color(` ┊ │ ${displayText}`));
-    return;
-  }
-  const totalTime = 200;
-  const sleepTime = displayText.length > 0 ? totalTime / displayText.length : 1;
-  console.log(color(' ┊ ┌── Chat API Response ──'));
-  process.stdout.write(color(' ┊ │ '));
-  for (const char of displayText) {
-    process.stdout.write(char);
-    await sleep(sleepTime);
-  }
-  process.stdout.write('\n');
-  console.log(color(' ┊ └──'));
-}
-
 function createProgressBar(current, total) {
   const barLength = 30;
   const filled = Math.round((current / total) * barLength);
@@ -67,7 +48,7 @@ function displayHeader(text, color) {
 }
 
 function isValidPrivateKey(pk) {
-  return /^0x[a-fA-F0-9]{64}$|^[a-fA-F0-9]{64}$/.test(pk);
+  return /^0x[a-fA-F0-9]{64}$|^[a jardins.test(pk);
 }
 
 function isValidUUID(uuid) {
@@ -75,7 +56,7 @@ function isValidUUID(uuid) {
 }
 
 async function getPublicIP(proxy = null) {
-  const spinner = ora({ text: chalk.cyan(' ┊ → Retrieving IP...'), prefixText: '', spinner: 'bouncingBar' }).start();
+  const spinner = ora({ text: chalk.cyan(' ┊ → Getting IP...'), prefixText: '', spinner: 'bouncingBar' }).start();
   try {
     let config = {};
     if (proxy) {
@@ -87,141 +68,8 @@ async function getPublicIP(proxy = null) {
     await sleep(100);
     return response.data.ip;
   } catch (err) {
-    spinner.fail(chalk.red(' ┊ ✗ Failed to retrieve IP'));
+    spinner.fail(chalk.red(' ┊ ✗ Failed to get IP'));
     return 'Unknown';
-  }
-}
-
-async function getNonce(proxy = null, retryCount = 0) {
-  const maxRetries = 5;
-  const spinner = ora({ text: chalk.cyan(` ┊ → Fetching nonce${retryCount > 0 ? ` (Retry ${retryCount}/${maxRetries})` : ''}...`), prefixText: '', spinner: 'bouncingBar' }).start();
-  try {
-    let config = { headers: { 'Content-Type': 'application/json' } };
-    if (proxy) {
-      config.httpAgent = new HttpsProxyAgent(proxy);
-      config.httpsAgent = new HttpsProxyAgent(proxy);
-    }
-    const response = await axios.get('https://enso.brianknows.org/api/auth/nonce', config);
-    spinner.succeed(chalk.green(' ┊ ✓ Nonce received'));
-    await sleep(100);
-    return response.data;
-  } catch (err) {
-    if (retryCount < maxRetries - 1) {
-      spinner.text = chalk.cyan(` ┊ → Fetching nonce (Retry ${retryCount + 1}/${maxRetries})...`);
-      await sleep(5000);
-      return getNonce(proxy, retryCount + 1);
-    }
-    spinner.fail(chalk.red(` ┊ ✗ Failed to fetch nonce: ${err.message}`));
-    throw err;
-  }
-}
-
-async function signMessage(privateKey, nonce, address) {
-  const spinner = ora({ text: chalk.cyan(' ┊ → Signing message...'), prefixText: '', spinner: 'bouncingBar' }).start();
-  try {
-    const wallet = new ethers.Wallet(privateKey);
-    const domain = 'enso.brianknows.org';
-    const issuedAt = moment().toISOString();
-    const message = [
-      `${domain} wants you to sign in with your Ethereum account:`,
-      address,
-      '',
-      'By signing this message, you confirm you have read and accepted the following Terms and Conditions: https://terms.enso.build/',
-      '',
-      `URI: https://enso.brianknows.org`,
-      `Version: 1`,
-      `Chain ID: 56`,
-      `Nonce: ${nonce}`,
-      `Issued At: ${issuedAt}`,
-    ].join('\n');
-
-    const signature = await wallet.signMessage(message);
-    const messageObj = {
-      domain,
-      address,
-      statement: 'By signing this message, you confirm you have read and accepted the following Terms and Conditions: https://terms.enso.build/',
-      uri: 'https://enso.brianknows.org',
-      version: '1',
-      nonce,
-      issuedAt,
-      chainId: 56,
-    };
-    spinner.succeed(chalk.green(' ┊ ✓ Message signed'));
-    await sleep(100);
-    return { message: messageObj, signature };
-  } catch (err) {
-    spinner.fail(chalk.red(` ┊ ✗ Failed to sign: ${err.message}`));
-    throw err;
-  }
-}
-
-async function verify(message, signature, address, proxy = null, retryCount = 0) {
-  const maxRetries = 5;
-  const spinner = ora({ text: chalk.cyan(` ┊ → Verifying account${retryCount > 0 ? ` (Retry ${retryCount}/${maxRetries})` : ''}...`), prefixText: '', spinner: 'bouncingBar' }).start();
-  try {
-    let config = {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': '*/*',
-        'User-Agent': randomUseragent.getRandom(),
-        'Origin': 'https://enso.brianknows.org',
-        'Referer': `https://enso.brianknows.org/search?userId=${address}`,
-      },
-    };
-    if (proxy) {
-      config.httpAgent = new HttpsProxyAgent(proxy);
-      config.httpsAgent = new HttpsProxyAgent(proxy);
-    }
-    const response = await axios.post('https://enso.brianknows.org/api/auth/verify', { message, signature }, config);
-    const cookies = response.headers['set-cookie'] || [];
-    const tokenMatch = cookies.find(cookie => cookie.includes('brian-token='));
-    const token = tokenMatch ? tokenMatch.split('brian-token=')[1].split(';')[0] : null;
-    if (!token) throw new Error('brian-token not found');
-    spinner.succeed(chalk.green(` ┊ ✓ Verification successful: brian-token=${token.slice(0, 10)}...; address=${address.slice(0, 8)}...`));
-    await sleep(100);
-    return { token, address, cookies };
-  } catch (err) {
-    if (retryCount < maxRetries - 1) {
-      spinner.text = chalk.cyan(` ┊ → Verifying account (Retry ${retryCount + 1}/${maxRetries})...`);
-      await sleep(5000);
-      return verify(message, signature, address, proxy, retryCount + 1);
-    }
-    spinner.fail(chalk.red(` ┊ ✗ Verification failed: ${err.message}`));
-    throw err;
-  }
-}
-
-async function getAccountInfo(token, address, proxy = null, retryCount = 0) {
-  const maxRetries = 5;
-  const spinner = ora({ text: chalk.cyan(` ┊ → Fetching account info${retryCount > 0 ? ` (Retry ${retryCount}/${maxRetries})` : ''}...`), prefixText: '', spinner: 'bouncingBar' }).start();
-  try {
-    const cookie = `brian-address=${address}; brian-token=${token}; ph_phc_NfMuib33NsuSeHbpu42Ng91vE5X6J1amefUiuVgwx5y_posthog={"distinct_id":"0196a6af-e55f-79aa-9eda-0bc979d7345e","$sesid":[1746600342091,"0196a97c-daff-7ede-b8ef-c6f03e5cb2e4",1746600254207],"$initial_person_info":{"r":"https://speedrun.enso.build/","u":"https://enso.brianknows.org/search?userId=${address}"}}`;
-    let config = {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': '*/*',
-        'User-Agent': randomUseragent.getRandom(),
-        'Cookie': cookie,
-        'Origin': 'https://enso.brianknows.org',
-        'Referer': `https://enso.brianknows.org/search?userId=${address}`,
-      },
-    };
-    if (proxy) {
-      config.httpAgent = new HttpsProxyAgent(proxy);
-      config.httpsAgent = new HttpsProxyAgent(proxy);
-    }
-    const response = await axios.get('https://enso.brianknows.org/api/auth/me', config);
-    spinner.succeed(chalk.green(` ┊ ✓ Login: ${response.data.account.address.slice(0, 8)}...${response.data.account.address.slice(-6)}`));
-    await sleep(100);
-    return response.data;
-  } catch (err) {
-    if (retryCount < maxRetries - 1) {
-      spinner.text = chalk.cyan(` ┊ → Fetching account info (Retry ${retryCount + 1}/${maxRetries})...`);
-      await sleep(5000);
-      return getAccountInfo(token, address, proxy, retryCount + 1);
-    }
-    spinner.fail(chalk.red(` ┊ ✗ Failed to fetch account info: ${err.message}`));
-    throw err;
   }
 }
 
@@ -271,49 +119,6 @@ async function getUserInfo(zealyUserId, proxy = null, retryCount = 0) {
       connectedWallet: 'Unknown',
       xp: 0,
     };
-  }
-}
-
-async function performChat(token, query, address, messages, proxy = null, retryCount = 0) {
-  const maxRetries = 5;
-  const spinner = ora({ text: chalk.cyan(` ┊ → Sending chat...`), prefixText: '', spinner: 'bouncingBar' }).start();
-  try {
-    const cookie = `brian-address=${address}; brian-token=${token}; ph_phc_NfMuib33NsuSeHbpu42Ng91vE5X6J1amefUiuVgwx5y_posthog={"distinct_id":"0196a6af-e55f-79aa-9eda-0bc979d7345e","$sesid":[1746600342091,"0196a97c-daff-7ede-b8ef-c6f03e5cb2e4",1746600254207],"$initial_person_info":{"r":"https://speedrun.enso.build/","u":"https://enso.brianknows.org/search?userId=${address}"}}`;
-    const payload = { query, kbId: 'b4393b93-e603-426d-8b9f-0af145498c92' };
-    let config = {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': '*/*',
-        'User-Agent': randomUseragent.getRandom(),
-        'Cookie': cookie,
-        'Origin': 'https://enso.brianknows.org',
-        'Referer': `https://enso.brianknows.org/search?userId=${address}`,
-      },
-    };
-    if (proxy) {
-      config.httpAgent = new HttpsProxyAgent(proxy);
-      config.httpsAgent = new HttpsProxyAgent(proxy);
-    }
-    const response = await axios.post('https://enso.brianknows.org/api/search', payload, config);
-    spinner.succeed(chalk.green(' ┊ ✓ Chat sent'));
-    await sleep(100);
-    return response.data.answer;
-  } catch (err) {
-    const errorMsg = err.response ? `HTTP ${err.response.status}` : err.message;
-    if (retryCount < maxRetries - 1) {
-      spinner.stop();
-      console.log(chalk.cyan(` ┊ → Sending chat (Retry ${retryCount + 1}/${maxRetries})...`));
-      await sleep(500);
-      return performChat(token, query, address, messages, proxy, retryCount + 1);
-    }
-    spinner.stop();
-    if (err.response && err.response.data) {
-      console.log(chalk.gray(` ┊ ℹ️ Server error details: ${JSON.stringify(err.response.data)}`));
-    }
-    const newQuery = messages[Math.floor(Math.random() * messages.length)];
-    console.log(chalk.yellow(` ┊ ⚠️ All retries failed. Trying new query: ${newQuery}`));
-    await sleep(5000);
-    return performChat(token, newQuery, address, messages, proxy, 0);
   }
 }
 
@@ -627,7 +432,7 @@ function displayCountdown(nextRun) {
     const hours = Math.floor(duration.asHours());
     const minutes = duration.minutes();
     const seconds = duration.seconds();
-    process.stdout.write(chalk.cyan(` ┊ ⏳ Waiting for next process: ${hours}:${minutes}:${seconds}\r`));
+    process.stdout.write(chalk.cyan(` ┊ ⏳ Waiting for the next process: ${hours}:${minutes}:${seconds}\r`));
   }, 1000);
 }
 
@@ -643,12 +448,10 @@ function calculateNextRun() {
   return nextRun;
 }
 
-async function processAccounts(accounts, messages, accountProxies, noType) {
-  const INTERACTIONS = 5;
+async function processAccounts(accounts, accountProxies, noType) {
   const DEFIDEX_LIMIT = 5;
   let successCount = 0;
   let failCount = 0;
-  let failedChats = 0;
   let successfulDexes = 0;
   let failedDexes = 0;
   let successfulCampaigns = 0;
@@ -664,33 +467,11 @@ async function processAccounts(accounts, messages, accountProxies, noType) {
     displayHeader(`═════[ Account ${i + 1}/${accounts.length} @ ${getTimestamp()} ]═════`, chalk.blue);
 
     const ip = await getPublicIP(proxy);
+    const userInfo = await getUserInfo(account.zealyUserId, proxy); 
 
     let accountSuccess = true;
-    let partialFailure = false;
 
     try {
-      const nonce = await getNonce(proxy);
-      const { message, signature } = await signMessage(account.privateKey, nonce, account.address);
-      const { token } = await verify(message, signature, account.address, proxy);
-      const accountInfo = await getAccountInfo(token, account.address, proxy);
-
-      console.log(chalk.magentaBright(' ┊ ┌── Chat Process ──'));
-      for (let j = 0; j < INTERACTIONS; j++) {
-        console.log(chalk.yellow(` ┊ ├─ Chat ${createProgressBar(j + 1, INTERACTIONS)} ──`));
-        const query = messages[Math.floor(Math.random() * messages.length)];
-        console.log(chalk.white(` ┊ │ Message: ${query}`));
-        const response = await performChat(token, query, account.address, messages, proxy);
-        if (response.startsWith('Failed')) {
-          failedChats++;
-          partialFailure = true;
-        }
-        await typeText(response, response.startsWith('Failed') ? chalk.red : chalk.green, noType);
-        await sleep(1000);
-        console.log(chalk.yellow(' ┊ └──'));
-        await sleep(3000);
-      }
-      console.log(chalk.yellow(' ┊ └──'));
-
       console.log(chalk.magentaBright(' ┊ ┌── DeFiDex Process ──'));
       for (let j = 0; j < DEFIDEX_LIMIT; j++) {
         console.log(chalk.yellow(` ┊ ├─ DeFiDex ${createProgressBar(j + 1, DEFIDEX_LIMIT)} ──`));
@@ -701,14 +482,13 @@ async function processAccounts(accounts, messages, accountProxies, noType) {
           successfulDexes++;
         } else {
           failedDexes++;
-          partialFailure = true;
           if (!success && j === 0) break;
         }
         await sleep(1000);
       }
       console.log(chalk.yellow(' ┊ └──'));
 
-      console.log(chalk.magentaBright(' ┊ ┌── Completing Campaigns Process ──'));
+      console.log(chalk.magentaBright(' ┊ ┌── Campaign Completion Process ──'));
       const campaigns = await getCampaigns(account.zealyUserId, proxy);
       if (campaigns.length === 0) {
         console.log(chalk.yellow(' ┊ │ Unable to fetch campaign list due to server error'));
@@ -719,7 +499,7 @@ async function processAccounts(accounts, messages, accountProxies, noType) {
           console.log(chalk.green(' ┊ │ All campaigns completed!'));
           console.log(chalk.yellow(' ┊ └──'));
         } else {
-          console.log(chalk.white(` ┊ │ ${pendingCampaigns.length} pending campaigns found`));
+          console.log(chalk.white(` ┊ │ ${pendingCampaigns.length} uncompleted campaigns found`));
           const spinner = ora({ text: chalk.cyan(` ┊ │ Processing campaigns: 0/${pendingCampaigns.length}...`), prefixText: '', spinner: 'bouncingBar' }).start();
           for (let j = 0; j < pendingCampaigns.length; j++) {
             const campaign = pendingCampaigns[j];
@@ -728,7 +508,6 @@ async function processAccounts(accounts, messages, accountProxies, noType) {
               successfulCampaigns++;
             } else {
               failedCampaigns++;
-              partialFailure = true;
             }
             spinner.text = chalk.cyan(` ┊ │ Processing campaigns: ${j + 1}/${pendingCampaigns.length}...`);
             await sleep(1000);
@@ -738,7 +517,7 @@ async function processAccounts(accounts, messages, accountProxies, noType) {
         }
       }
 
-      console.log(chalk.magentaBright(' ┊ ┌── Completing Protocols Process ──'));
+      console.log(chalk.magentaBright(' ┊ ┌── Protocol Completion Process ──'));
       const protocols = await getProtocols(account.zealyUserId, proxy);
       if (protocols.length === 0) {
         console.log(chalk.yellow(' ┊ │ Unable to fetch protocol list due to server error'));
@@ -749,7 +528,7 @@ async function processAccounts(accounts, messages, accountProxies, noType) {
           console.log(chalk.green(' ┊ │ All protocols completed!'));
           console.log(chalk.yellow(' ┊ └──'));
         } else {
-          console.log(chalk.white(` ┊ │ ${pendingProtocols.length} pending protocols found`));
+          console.log(chalk.white(` ┊ │ ${pendingProtocols.length} uncompleted protocols found`));
           const spinner = ora({ text: chalk.cyan(` ┊ │ Processing protocols: 0/${pendingProtocols.length}...`), prefixText: '', spinner: 'bouncingBar' }).start();
           for (let j = 0; j < pendingProtocols.length; j++) {
             const protocol = pendingProtocols[j];
@@ -758,7 +537,6 @@ async function processAccounts(accounts, messages, accountProxies, noType) {
               successfulProtocols++;
             } else {
               failedProtocols++;
-              partialFailure = true;
             }
             spinner.text = chalk.cyan(` ┊ │ Processing protocols: ${j + 1}/${pendingProtocols.length}...`);
             await sleep(1000);
@@ -788,9 +566,6 @@ async function processAccounts(accounts, messages, accountProxies, noType) {
 
   displayHeader(`═════[ Completed @ ${getTimestamp()} ]═════`, chalk.blue);
   console.log(chalk.gray(` ┊ ✅ ${successCount} accounts successful, ❌ ${failCount} accounts failed`));
-  if (failedChats > 0) {
-    console.log(chalk.yellow(` ┊ ⚠️ ${failedChats} chats failed`));
-  }
   if (failedCampaigns > 0) {
     console.log(chalk.yellow(` ┊ ⚠️ ${failedCampaigns} campaigns failed`));
   }
@@ -838,17 +613,7 @@ async function main() {
   }
 
   if (accounts.length === 0) {
-    console.log(chalk.red('✗ No valid accounts in accounts.txt!'));
-    rl.close();
-    return;
-  }
-
-  let messages = [];
-  try {
-    const msgData = await fs.readFile('message.txt', 'utf8');
-    messages = msgData.split('\n').filter(line => line.trim() !== '');
-  } catch (err) {
-    console.log(chalk.red('✗ File message.txt not found or empty!'));
+    console.log(chalk.red('✗ No valid accounts found in accounts.txt!'));
     rl.close();
     return;
   }
@@ -870,7 +635,7 @@ async function main() {
       const proxyData = await fs.readFile('proxy.txt', 'utf8');
       proxies = proxyData.split('\n').filter(line => line.trim() !== '');
     } catch (err) {
-      console.log(chalk.yellow('✗ File proxy.txt not found. Continuing without proxy. Ensure proxy.txt contains a list of proxies in the format http://user:pass@host:port, one per line.'));
+      console.log(chalk.yellow('✗ File proxy.txt not found. Proceeding without proxy. Ensure proxy.txt contains a list of proxies in the format http://user:pass@host:port, one per line.'));
     }
   }
 
@@ -883,7 +648,7 @@ async function main() {
   });
 
   console.log(chalk.cyan(` ┊ ⏰ Starting first account process...`));
-  await processAccounts(accounts, messages, accountProxies, noType);
+  await processAccounts(accounts, accountProxies, noType);
 
   const scheduleNextRun = async () => {
     const nextRun = calculateNextRun();
@@ -891,7 +656,7 @@ async function main() {
     schedule.scheduleJob(nextRun.toDate(), async () => {
       const currentTimeWIB = moment().tz('Asia/Jakarta').format('DD/MM/YYYY, HH:mm:ss');
       console.log(chalk.cyan(` ┊ ⏰ Process started at ${currentTimeWIB}`));
-      await processAccounts(accounts, messages, accountProxies, noType);
+      await processAccounts(accounts, accountProxies, noType);
       scheduleNextRun();
     });
   };
